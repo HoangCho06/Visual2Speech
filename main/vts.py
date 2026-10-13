@@ -3,26 +3,29 @@ from ultralytics import YOLO
 import torch, easyocr, csv, os, time
 import numpy as np
 
-def create_test_data_file(results):
+def create_result_data_file(results):
     # check if file exist, if not then create one
     file_name = 'data.csv'
     if os.path.exists(file_name):
         pass
     else:
         with open(file_name, 'w') as file:
-            file.write('(class id, class name)\n')
+            file.write('class id, class name\n')
+            file.write('x1,y1, x2,y2\n\n')
 
     # records each objects detected
     class_ids = results.boxes.cls.int().tolist()
+    class_boxes = [[round(coord, 2) for coord in box] for box in results.boxes.xyxy.tolist()]
     class_names = []
     print(class_ids)
+    print(class_boxes)
 
     for ids in class_ids:
         class_names.append(results.names[ids])
 
     with open('data.csv', 'a+') as file:
         combined_list = list(zip(class_ids,class_names))
-        file.write(str(combined_list))
+        file.write(f'{str(combined_list)}\n{str(class_boxes)}\n')
         file.write('\n')
 
 def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
@@ -43,9 +46,32 @@ def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
 
         return prev
 
+def YOLO_detection(model, target_classes, source, show_test=False):
+    YOLO_results = model.predict(source=source, stream=True)
+    class_id = 0
+    class_box = []
+
+    for result in YOLO_results:
+        class_ids = result.boxes.cls.int().tolist()
+        class_boxes = result.boxes.xyxy.int().tolist()
+
+        for class_id in class_ids:
+            if class_id in target_classes:
+                target_index = class_ids.index(class_id)
+                x1, y1, x2, y2 = class_boxes[target_index]
+                class_box = [x1,y1,x2,y2]
+
+                if show_test:
+                    create_result_data_file(result)
+                    cv.rectangle(source, (x1,y1), (x2,y2), (0,255,0), 2)
+                break
+
+    return class_id, class_box
+
+
 def main():
 
-    YOLO_model = YOLO('visual_to_speech/model/yolov8n.pt')
+    YOLO_model = YOLO('visual_to_speech/model/yolo26n.pt')
     target_classes = [
         0, # person 
         2, # car
@@ -73,22 +99,13 @@ def main():
         bottom_left = (0,height)
 
         # object detection
-        YOLO_results = YOLO_model.predict(source=frame, stream=True)
-        for result in YOLO_results:
-            create_test_data_file(result)
-            class_ids = result.boxes.cls.int().tolist()
-
-            for class_id in class_ids:
-                if class_id in target_classes:
-                    #print(True)
-                    frame = result.plot()
-                    break
+        class_id, class_box = YOLO_detection(YOLO_model, target_classes, frame, show_test=True)
 
         # calculating fps
         prev_frame_time = show_fps(prev_frame_time, frame, bottom_left, font, font_scale, black, font_thickness)
 
 
-        cv.imshow('v0.1.1', frame)
+        cv.imshow('v0.1.2', frame)
 
         if cv.waitKey(1) == ord('q'):
             break
