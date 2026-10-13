@@ -15,6 +15,8 @@ def create_test_data_file(results):
     # records each objects detected
     class_ids = results.boxes.cls.int().tolist()
     class_names = []
+    print(class_ids)
+
     for ids in class_ids:
         class_names.append(results.names[ids])
 
@@ -73,10 +75,14 @@ def main():
         # object detection
         YOLO_results = YOLO_model.predict(source=frame, stream=True)
         for result in YOLO_results:
-            class_ids = result.boxes.cls.int().tolist()
             create_test_data_file(result)
-            frame = result.plot()
-            break
+            class_ids = result.boxes.cls.int().tolist()
+
+            for class_id in class_ids:
+                if class_id in target_classes:
+                    #print(True)
+                    frame = result.plot()
+                    break
 
         # calculating fps
         prev_frame_time = show_fps(prev_frame_time, frame, bottom_left, font, font_scale, black, font_thickness)
