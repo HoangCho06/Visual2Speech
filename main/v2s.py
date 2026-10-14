@@ -1,21 +1,24 @@
 import cv2 as cv
 from ultralytics import YOLO
-import torch, easyocr, csv, os, time
+import torch, csv, os, time
 import numpy as np
 
 def create_result_data_file(results):
-    # check if file exist, if not then create one
     file_name = 'data.csv'
+    decimal_point = 2
+    
+    # check if file exist, if not then create one
     if os.path.exists(file_name):
         pass
     else:
         with open(file_name, 'w') as file:
             file.write('class id, class name\n')
-            file.write('x1,y1, x2,y2\n\n')
+            file.write('x1,y1, x2,y2\n')
+            file.write('\n')
 
     # records each objects detected
     class_ids = results.boxes.cls.int().tolist()
-    class_boxes = [[round(coord, 2) for coord in box] for box in results.boxes.xyxy.tolist()]
+    class_boxes = [[round(coord, decimal_point) for coord in box] for box in results.boxes.xyxy.tolist()]
     class_names = []
     print(class_ids)
     print(class_boxes)
@@ -24,8 +27,9 @@ def create_result_data_file(results):
         class_names.append(results.names[ids])
 
     with open('data.csv', 'a+') as file:
-        combined_list = list(zip(class_ids,class_names))
-        file.write(f'{str(combined_list)}\n{str(class_boxes)}\n')
+        combined_list = str(list(zip(class_ids,class_names)))
+        class_boxes = str(class_boxes)
+        file.write(f'{combined_list}\n{class_boxes}\n')
         file.write('\n')
 
 def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
@@ -71,7 +75,7 @@ def YOLO_detection(model, target_classes, source, show_test=False):
 
 def main():
 
-    YOLO_model = YOLO('visual_to_speech/model/yolo26n.pt')
+    YOLO_model = YOLO('model/yolo26n.pt')
     target_classes = [
         0, # person 
         2, # car
@@ -105,7 +109,7 @@ def main():
         prev_frame_time = show_fps(prev_frame_time, frame, bottom_left, font, font_scale, black, font_thickness)
 
 
-        cv.imshow('v0.1.2', frame)
+        cv.imshow('v0.1.2.1', frame)
 
         if cv.waitKey(1) == ord('q'):
             break
