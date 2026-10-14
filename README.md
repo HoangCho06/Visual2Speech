@@ -16,10 +16,10 @@ pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu13
 
 ## OpenCV
 ```
-pip install opencv-python==4.11.0.86
+pip3 install opencv-python==4.11.0.86
 ```
 
 ## YOLO
 ```
-pip install ultralytics==8.4.177
+pip3 install ultralytics==8.4.177
 ```
