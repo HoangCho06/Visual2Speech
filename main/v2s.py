@@ -81,8 +81,13 @@ def YOLO_detection(model, target_classes, source, show_test=False):
 
     for result in YOLO_results:
         class_ids = result.boxes.cls.int().tolist()
-        confidience_scores = result.boxes.conf.int().tolist()
+        confidience_scores = result.boxes.conf.tolist()
         class_boxes = result.boxes.xyxy.int().tolist()
+
+        if show_test:
+            print('class ids: ',class_ids)
+            print('class boxes: ',class_boxes)
+            print('confidience scores: ',confidience_scores)
 
         for class_id in class_ids:
             if class_id in target_classes:
@@ -95,16 +100,16 @@ def YOLO_detection(model, target_classes, source, show_test=False):
                     biggest_class_box = [x1,y1,x2,y2]
 
                     best_class_id = class_id
-                    confidience_score = confidience_scores[target_index]
+                    confidience_score = round(confidience_scores[target_index], 2)
 
                 if show_test:
                     create_result_data_file(result, biggest_area, biggest_class_box, confidience_score)
+                    print('biggest class box: ',biggest_class_box)
                     cv.rectangle(source, (x1,y1), (x2,y2), green, thickness)
                 break
 
     closest_class_object = create_class_information(best_class_id, biggest_class_box, confidience_score)
     return closest_class_object
-
 
 
 def main():
@@ -149,7 +154,7 @@ def main():
         prev_frame_time = show_fps(prev_frame_time, frame, bottom_left, font, font_scale, black, font_thickness)
 
 
-        cv.imshow('v0.2.0', frame)
+        cv.imshow('v0.2.1', frame)
 
         if cv.waitKey(1) == ord('q'):
             break
