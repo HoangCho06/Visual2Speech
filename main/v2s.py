@@ -1,18 +1,20 @@
 import cv2 as cv
-import numpy as np
 from ultralytics import YOLO
 from rapidocr import RapidOCR
-import torch, easyocr, csv, os, time, pyautogui
+import torch, easyocr, csv, os, time
+import numpy as np
 
-def create_result_data_file(results, biggest_area, biggest_class_box):
+def check_gpu():
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def create_result_data_file(results, biggest_area, biggest_class_box, confidience_score):
     # check if file exist, if not then create one
     file_name = 'test_data/data.csv'
     if os.path.exists(file_name):
         pass
     else:
         with open(file_name, 'w') as file:
-            file.write('class id, class name, biggest area, biggest box\n')
-            file.write('x1,y1, x2,y2\n\n')
+            pass
 
     # records each objects detected
     class_ids = results.boxes.cls.int().tolist()
@@ -23,8 +25,16 @@ def create_result_data_file(results, biggest_area, biggest_class_box):
         class_names.append(results.names[ids])
 
     with open('test_data/data.csv', 'a+') as file:
-        combined_list = list(zip(class_ids,class_names))
-        file.write(f'{str(combined_list)}, {round(biggest_area,2)}, {biggest_class_box} \n{str(class_boxes)}\n')
+        combined_ids_and_names = list(zip(class_ids,class_names))
+        combined_names_and_boxes = list(zip(class_names,class_boxes))
+        file.write(f'(class id + class name): {str(combined_ids_and_names)}\n')
+        file.write(f'(class name + x1,y1, x2,y2): {str(combined_names_and_boxes)}')
+        file.write(f''' 
+biggest area: {round(biggest_area,2)},
+biggest class box: {biggest_class_box}, 
+confidience score of best class: {confidience_score}\n
+''')
+
         file.write('\n')
 
 def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
@@ -45,9 +55,25 @@ def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
 
         return prev
 
+class create_class_information:
+    def __init__(self, id, coordinates, confidience):
+        self.class_id = id
+        self.coordinates = coordinates
+        self.confidience_score = confidience
+
+    def get_class_id(self):
+        return self.class_id
+
+    def get_coordinates(self):
+        return self.coordinates
+
+    def get_confidience_score(self):
+        return self.confidience_score
+
 def YOLO_detection(model, target_classes, source, show_test=False):
     YOLO_results = model.predict(source=source, stream=True)
-    class_id = 0
+    best_class_id = 0
+    confidience_score = 0
     green = (0, 255, 0)
     thickness = 2
     biggest_class_box = []
@@ -55,27 +81,35 @@ def YOLO_detection(model, target_classes, source, show_test=False):
 
     for result in YOLO_results:
         class_ids = result.boxes.cls.int().tolist()
+        confidience_scores = result.boxes.conf.int().tolist()
         class_boxes = result.boxes.xyxy.int().tolist()
 
         for class_id in class_ids:
             if class_id in target_classes:
                 target_index = class_ids.index(class_id)
                 x1, y1, x2, y2 = class_boxes[target_index]
+                
                 temp_area = (x2-x1) * (y2-y1)
                 if temp_area > biggest_area:
                     biggest_area = temp_area
                     biggest_class_box = [x1,y1,x2,y2]
 
+                    best_class_id = class_id
+                    confidience_score = confidience_scores[target_index]
+
                 if show_test:
-                    create_result_data_file(result, biggest_area, biggest_class_box)
+                    create_result_data_file(result, biggest_area, biggest_class_box, confidience_score)
                     cv.rectangle(source, (x1,y1), (x2,y2), green, thickness)
                 break
 
-    return class_id, biggest_class_box
+    closest_class_object = create_class_information(best_class_id, biggest_class_box, confidience_score)
+    return closest_class_object
 
 
 
 def main():
+    # checking if device has a gpu or not
+    device = check_gpu()
 
     YOLO_model = YOLO('model/yolo26n.pt')
     target_classes = [
@@ -105,15 +139,17 @@ def main():
         bottom_left = (0,height)
 
         # object detection
-        class_id, biggest_class_box = YOLO_detection(YOLO_model, target_classes, frame, show_test=True)
+        class_object = YOLO_detection(YOLO_model, target_classes, frame, show_test=True)
 
-        # RapidOCR
+        # RapidOCR, no gpu present
+        if device == "cpu":
+            pass
 
         # calculating fps
         prev_frame_time = show_fps(prev_frame_time, frame, bottom_left, font, font_scale, black, font_thickness)
 
 
-        cv.imshow('v0.1.4', frame)
+        cv.imshow('v0.2.0', frame)
 
         if cv.waitKey(1) == ord('q'):
             break
