@@ -1,6 +1,7 @@
 import cv2 as cv
 from ultralytics import YOLO
 from rapidocr import RapidOCR
+from datetime import datetime as dt
 import torch, easyocr, csv, os, time
 import numpy as np
 
@@ -8,33 +9,33 @@ def check_gpu():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def create_result_data_file(results, biggest_area, biggest_class_box, confidience_score):
-    # check if file exist, if not then create one
-    file_name = 'test_data/data.csv'
-    if os.path.exists(file_name):
-        pass
-    else:
-        with open(file_name, 'w') as file:
-            pass
+    decimal_point = 2
+    time_of_creation = dt.now()
+    year = time_of_creation.year
+    month = time_of_creation.month
+    day = time_of_creation.day
 
     # records each objects detected
-    class_ids = results.boxes.cls.int().tolist()
-    class_boxes = [[round(coord, 2) for coord in box] for box in results.boxes.xyxy.tolist()]
+    class_ids = results.boxes.cls.int().tolist
+    class_boxes = [[round(coord, decimal_point) for coord in box] for box in results.boxes.xyxy.tolist()]
     class_names = []
 
     for ids in class_ids:
         class_names.append(results.names[ids])
 
-    with open('test_data/data.csv', 'a+') as file:
+    # check if file exist, if not then create one
+    file_name = f'test_data/v2s_test_data_{day}{month}{year}.csv'
+    with open(file_name, 'a+') as file:
         combined_ids_and_names = list(zip(class_ids,class_names))
         combined_names_and_boxes = list(zip(class_names,class_boxes))
+
         file.write(f'(class id + class name): {str(combined_ids_and_names)}\n')
         file.write(f'(class name + x1,y1, x2,y2): {str(combined_names_and_boxes)}')
         file.write(f''' 
-biggest area: {round(biggest_area,2)},
+biggest area: {round(biggest_area,decimal_point)},
 biggest class box: {biggest_class_box}, 
 confidience score of best class: {confidience_score}\n
 ''')
-
         file.write('\n')
 
 def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
@@ -145,6 +146,11 @@ def main():
 
         # object detection
         class_object = YOLO_detection(YOLO_model, target_classes, frame, show_test=True)
+        if cv.waitKey(1) == ord('s'):
+            closest_object_coordinates = class_object.get_coordinates()
+            if closest_object_coordinates != []:
+                object_frame = frame[closest_object_coordinates[1]:closest_object_coordinates[3], closest_object_coordinates[0]:closest_object_coordinates[2]]
+                cv.imwrite('picture.png', object_frame)
 
         # RapidOCR, no gpu present
         if device == "cpu":
@@ -153,8 +159,7 @@ def main():
         # calculating fps
         prev_frame_time = show_fps(prev_frame_time, frame, bottom_left, font, font_scale, black, font_thickness)
 
-
-        cv.imshow('v0.2.1', frame)
+        cv.imshow('v0.2.2', frame)
 
         if cv.waitKey(1) == ord('q'):
             break
