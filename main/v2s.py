@@ -8,7 +8,7 @@ import numpy as np
 def check_gpu():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def create_result_data_file(results, biggest_area, biggest_class_box, confidience_score):
+def create_result_data_file(results, biggest_area, biggest_class_box, confidience_score, best_object_name):
     decimal_point = 2
     time_of_creation = dt.now()
     year = time_of_creation.year
@@ -16,7 +16,7 @@ def create_result_data_file(results, biggest_area, biggest_class_box, confidienc
     day = time_of_creation.day
 
     # records each objects detected
-    class_ids = results.boxes.cls.int().tolist
+    class_ids = results.boxes.cls.int().tolist()
     class_boxes = [[round(coord, decimal_point) for coord in box] for box in results.boxes.xyxy.tolist()]
     class_names = []
 
@@ -24,7 +24,7 @@ def create_result_data_file(results, biggest_area, biggest_class_box, confidienc
         class_names.append(results.names[ids])
 
     # check if file exist, if not then create one
-    file_name = f'test_data/v2s_test_data_{day}{month}{year}.csv'
+    file_name = f'test_data/{day}{month}{year}_v2s_test_data.csv'
     with open(file_name, 'a+') as file:
         combined_ids_and_names = list(zip(class_ids,class_names))
         combined_names_and_boxes = list(zip(class_names,class_boxes))
@@ -32,11 +32,28 @@ def create_result_data_file(results, biggest_area, biggest_class_box, confidienc
         file.write(f'(class id + class name): {str(combined_ids_and_names)}\n')
         file.write(f'(class name + x1,y1, x2,y2): {str(combined_names_and_boxes)}')
         file.write(f''' 
-biggest area: {round(biggest_area,decimal_point)},
-biggest class box: {biggest_class_box}, 
-confidience score of best class: {confidience_score}\n
+best object: {best_object_name},
+{best_object_name} area: {round(biggest_area,decimal_point)},
+{best_object_name} box: {biggest_class_box}, 
+confidience score of {best_object_name}: {confidience_score}\n
 ''')
         file.write('\n')
+
+def screenshot(source, object, image_counter):
+    time_of_creation = dt.now()
+    year = time_of_creation.year
+    month = time_of_creation.month
+    day = time_of_creation.day
+    closest_object_coordinates = object.get_coordinates()
+    object_name = object.get_object_name()
+    file_name = f'test_data/{image_counter}{day}{month}{year}_{object_name}_picture.png'
+    if closest_object_coordinates != []:
+        # frame[x1:x2, y1:y2]
+        object_frame = source[closest_object_coordinates[1]:closest_object_coordinates[3], closest_object_coordinates[0]:closest_object_coordinates[2]] 
+        cv.imwrite(file_name, object_frame)
+        print('taken picture')
+        image_counter+=1
+    return image_counter
 
 def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
         new = time.time()
@@ -57,11 +74,14 @@ def show_fps(prev, source, position, font, font_scale, colour, font_thickness):
         return prev
 
 class create_class_information:
-    def __init__(self, id, coordinates, confidience):
+    def __init__(self,object_name, id, coordinates, confidience):
+        self.name = object_name
         self.class_id = id
         self.coordinates = coordinates
         self.confidience_score = confidience
 
+    def get_object_name(self):
+        return self.name
     def get_class_id(self):
         return self.class_id
 
@@ -77,6 +97,7 @@ def YOLO_detection(model, target_classes, source, show_test=False):
     confidience_score = 0
     green = (0, 255, 0)
     thickness = 2
+    best_object_name = ''
     biggest_class_box = []
     biggest_area = 0
 
@@ -90,10 +111,10 @@ def YOLO_detection(model, target_classes, source, show_test=False):
             print('class boxes: ',class_boxes)
             print('confidience scores: ',confidience_scores)
 
-        for class_id in class_ids:
+        for target_index, class_id in enumerate(class_ids):
             if class_id in target_classes:
-                target_index = class_ids.index(class_id)
                 x1, y1, x2, y2 = class_boxes[target_index]
+                best_object_name = result.names[target_index]
                 
                 temp_area = (x2-x1) * (y2-y1)
                 if temp_area > biggest_area:
@@ -104,16 +125,17 @@ def YOLO_detection(model, target_classes, source, show_test=False):
                     confidience_score = round(confidience_scores[target_index], 2)
 
                 if show_test:
-                    create_result_data_file(result, biggest_area, biggest_class_box, confidience_score)
-                    print('biggest class box: ',biggest_class_box)
+                    create_result_data_file(result, biggest_area, biggest_class_box, confidience_score, best_object_name)
+                    print(f'{best_object_name} box: ',biggest_class_box)
                     cv.rectangle(source, (x1,y1), (x2,y2), green, thickness)
-                break
+                #break
 
-    closest_class_object = create_class_information(best_class_id, biggest_class_box, confidience_score)
+    closest_class_object = create_class_information(best_object_name, best_class_id, biggest_class_box, confidience_score)
     return closest_class_object
 
 
-def main():
+
+def main(test=False):
     # checking if device has a gpu or not
     device = check_gpu()
 
@@ -135,6 +157,7 @@ def main():
     black = (0,0,0)
     font_scale = 1
     font_thickness = 1
+    image_counter = 1
 
     prev_frame_time = 0
 
@@ -143,14 +166,14 @@ def main():
         width = int(cap.get(3))
         height = int(cap.get(4))
         bottom_left = (0,height)
+        key = cv.waitKey(1) 
+        if not ret:
+            break
 
         # object detection
-        class_object = YOLO_detection(YOLO_model, target_classes, frame, show_test=True)
-        if cv.waitKey(1) == ord('s'):
-            closest_object_coordinates = class_object.get_coordinates()
-            if closest_object_coordinates != []:
-                object_frame = frame[closest_object_coordinates[1]:closest_object_coordinates[3], closest_object_coordinates[0]:closest_object_coordinates[2]]
-                cv.imwrite('picture.png', object_frame)
+        closets_object = YOLO_detection(YOLO_model, target_classes, frame, show_test=test)
+        if key == ord('s') and test:
+            image_counter = screenshot(frame, closets_object, image_counter)
 
         # RapidOCR, no gpu present
         if device == "cpu":
@@ -159,12 +182,13 @@ def main():
         # calculating fps
         prev_frame_time = show_fps(prev_frame_time, frame, bottom_left, font, font_scale, black, font_thickness)
 
-        cv.imshow('v0.2.2', frame)
 
-        if cv.waitKey(1) == ord('q'):
+        cv.imshow('v0.2.3', frame)
+
+        if key == ord('q'):
             break
 
     cap.release()
     cv.destroyAllWindows()
 
-main()
+main(test=True)
